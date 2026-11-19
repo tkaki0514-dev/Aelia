@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"><meta name="version" content="1.1.0"><title>Aelia に参加</title>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex"><meta name="version" content="1.2.0"><title>Aelia に参加</title>
 <style>
 :root{--ink:#eafff5;--ink2:#9fc9b8;--line:rgba(255,255,255,.16);--acc:#9db6ff}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% 25%,#164838,#08211b 70%);color:var(--ink);font:500 15px/1.6 system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;display:flex;align-items:center;justify-content:center;padding:16px}
@@ -11,7 +11,15 @@ input.cd{font:800 28px ui-monospace,monospace;letter-spacing:.2em;text-align:cen
 button{width:100%;margin-top:14px;border-radius:14px;border:0;background:linear-gradient(145deg,#9db6ff,#c8aaff);color:#10213a;padding:13px;font:800 15px inherit}
 button.sub{background:rgba(255,255,255,.1);color:var(--ink);border:1px solid var(--line);margin-top:8px}
 .err{color:#ffb4a8;font-size:13px;min-height:18px;margin-top:8px}
-#scr img{width:100%;border-radius:12px;background:#000;display:none}
+#vw{position:fixed;inset:0;z-index:9999;background:#02100c;display:flex;flex-direction:column}
+#vw[hidden]{display:none}
+#vh{display:flex;gap:8px;align-items:center;padding:10px 12px;padding-top:max(10px,env(safe-area-inset-top));background:rgba(10,38,30,.96);border-bottom:1px solid var(--line)}
+#vh b{flex:1;font-size:14px}#vh button{margin:0;width:auto;padding:9px 14px;font-size:14px}
+#vb{flex:1;overflow:auto;display:flex;-webkit-overflow-scrolling:touch}
+#vb img{margin:auto;display:none;background:#000}
+#vb.fit img{max-width:100%;max-height:100%;object-fit:contain}
+#vb{position:relative}#vb.rot{overflow:hidden}#vb.rot img{position:absolute;margin:0;max-width:none;max-height:none;transform-origin:0 0;transform:rotate(90deg)}
+#vb .wait{margin:auto;color:var(--ink2);font-size:15px}
 .box.wide{width:min(640px,100%)}
 .row2{display:flex;gap:8px;flex-wrap:wrap}.row2 button{flex:1;min-width:120px;margin-top:8px}
 button.on{background:linear-gradient(145deg,#9db6ff,#c8aaff);color:#10213a}
@@ -31,20 +39,19 @@ button.on{background:linear-gradient(145deg,#9db6ff,#c8aaff);color:#10213a}
 <label>名前</label><input id="nm" maxlength="16" placeholder="なまえ">
 <label>コード（つくった人の画面の数字）</label><input id="cd" class="cd" inputmode="numeric" maxlength="12" placeholder="000 000" autocomplete="off">
 <label id="sl" hidden>ルームコード</label><input id="sid" hidden maxlength="300" placeholder="8文字のコード" autocapitalize="none">
-<div class="err" id="er"></div><button id="go">つなぐ</button><p style="text-align:center;font-size:11px;margin:14px 0 0">Ver.1.1.0</p></div>
+<div class="err" id="er"></div><button id="go">つなぐ</button><p style="text-align:center;font-size:11px;margin:14px 0 0">Ver.1.2.0</p></div>
 <div id="c" hidden><h2 id="who"></h2><p>つながっています。</p>
-<div class="row2"><button id="img">画像をおくる</button><button class="sub" id="wt">相手の画面を見る（見るだけ）</button></div>
+<div class="row2"><button id="img">画像をおくる</button><button class="sub" id="wt">相手の画面を大きく見る</button></div>
 <div class="row2"><button class="sub" id="wbtn">✍ 書く</button><button class="sub" id="m2btn">メニュー2</button></div>
 <div id="wr" hidden><h3>✍ 書く欄</h3><canvas id="pad" width="1000" height="750"></canvas>
-<div class="tb"><button class="on" id="mpen">通常モード</button><button class="sub" id="mera">消しゴム</button><button class="sub" id="mclr">ぜんぶ消す</button></div>
+<div class="tb"><button class="on" id="mpen">通常モード</button><button class="sub" id="mera">消しゴム（指2本でも切りかえ）</button><button class="sub" id="mclr">ぜんぶ消す</button></div>
 <div class="tb"><div class="sw" id="sw"></div></div></div>
 <div id="m2" hidden><h3>メニュー2</h3>
-<h3 style="font-size:13px">⏪ タイムマシン<span class="m2tag">神機能</span></h3><p>書いた順に、巻き戻したり、早送りしたりできるよ。</p>
-<input type="range" id="tms" min="0" max="0" value="0"><div class="lab" id="tml"></div>
-<div class="row2"><button class="sub" id="tmp">▶ 再生</button><button id="tmo">ここで決定</button><button class="sub" id="tmu">もとにもどす</button></div>
-<h3 style="font-size:13px;margin-top:14px">💾 保存</h3><button id="svb">いまの内容を保存</button>
+<h3 style="font-size:13px">💾 保存</h3><button id="svb">いまの内容を保存</button>
 <h3 style="font-size:13px;margin-top:14px">🕘 保存履歴</h3><div id="hl"></div></div><input id="file" type="file" accept="image/*" hidden>
-<div id="scr" style="margin-top:12px"><img id="fr" alt=""></div><div id="pic"></div><p style="text-align:center;font-size:11px;margin-top:14px">Ver.1.1.0</p><div class="err" id="er2"></div></div>
+<div id="pic"></div>
+<div id="vw" hidden><div id="vh"><b id="vt">相手の画面</b><button class="sub" id="vr">⟳ 横にする</button><button class="sub" id="vm">－</button><button class="sub" id="vz">＋</button><button id="vx">とじる</button></div>
+<div id="vb" class="fit"><div class="wait" id="vwait">画面を待っています…</div><img id="fr" alt=""></div></div><p style="text-align:center;font-size:11px;margin-top:14px">Ver.1.2.0</p><div class="err" id="er2"></div></div>
 </div><script>
 const AeliaNet=(function(){
   const BROKERS=['wss://broker.hivemq.com:8884/mqtt','wss://broker.emqx.io:8084/mqtt','wss://test.mosquitto.org:8081/mqtt'];
@@ -153,51 +160,55 @@ $('go').onclick=async()=>{const e=$('er');const name=$('nm').value.replace(/[\u0
   if(r!==true){try{await room.leave();}catch(x){}room=null;e.textContent=r;$('go').disabled=false;return;}
   try{localStorage.setItem('aelia.name.guest',name);}catch(x){}
   setInterval(()=>room.emit('ae-hb',{}).catch(()=>{}),8000);
-  onChunk('ae-scr',b=>{const u=URL.createObjectURL(new Blob([b],{type:'image/jpeg'}));const im=$('fr');const o=im.src;im.src=u;im.style.display='block';if(o)URL.revokeObjectURL(o);});
+  onChunk('ae-scr',b=>{const u=URL.createObjectURL(new Blob([b],{type:'image/jpeg'}));const im=$('fr');const o=im.src;im.src=u;im.style.display='block';$('vwait').style.display='none';if(o)URL.revokeObjectURL(o);if(rot)im.onload=()=>applyZoom();});
   onChunk('ae-pic',b=>{const im=document.createElement('img');im.src=URL.createObjectURL(new Blob([b],{type:'image/jpeg'}));im.style.cssText='width:100%;border-radius:12px;margin-top:10px';$('pic').prepend(im);});
   $('f').hidden=true;$('c').hidden=false;document.querySelector('.box').classList.add('wide');$('who').textContent=host+' さんとつながり中';
   addEventListener('pagehide',()=>{try{room.emit('ae-bye',{});}catch(x){}});
  }catch(x){e.textContent='つなげませんでした。ネットにつながっているか、たしかめてね';$('go').disabled=false;}};
 $('img').onclick=()=>{$('file').value='';$('file').click();};
 $('file').onchange=async()=>{const f=$('file').files[0];if(!f)return;$('er2').textContent='送っています…';try{await sendBlob('ae-img',new Uint8Array(await (await toJpeg(f)).arrayBuffer()));$('er2').textContent='送りました！';}catch(e){$('er2').textContent='送れませんでした';}};
-$('wt').onclick=()=>{room.emit('ae-want',{v:1}).catch(()=>{});$('wt').textContent='画面を待っています…';};
+let zoom=1,rot=false;
+function applyZoom(){const im=$('fr'),vb=$('vb');vb.classList.toggle('rot',rot);vb.classList.toggle('fit',!rot&&zoom===1);
+ im.removeAttribute('style');if(im.src)im.style.display='block';
+ if(rot){const vw=vb.clientWidth,vh=vb.clientHeight,iw=im.naturalWidth||16,ih=im.naturalHeight||10;
+  const w=Math.min(vh,vw*iw/ih),h=w*ih/iw;im.style.width=w+'px';im.style.height=h+'px';im.style.left=((vw-h)/2+h)+'px';im.style.top=((vh-w)/2)+'px';}
+ else if(zoom>1){im.style.maxWidth='none';im.style.maxHeight='none';im.style.width=(zoom*100)+'%';im.style.height='auto';}
+ $('vt').textContent='相手の画面'+(rot?'・横':zoom>1?'（'+zoom+'倍）':'');$('vr').textContent=rot?'⟲ もどす':'⟳ 横にする';}
+$('vr').onclick=()=>{rot=!rot;zoom=1;applyZoom();};
+$('vz').onclick=()=>{rot=false;zoom=Math.min(4,zoom+1);applyZoom();};
+$('vm').onclick=()=>{rot=false;zoom=Math.max(1,zoom-1);applyZoom();};
+$('fr').ondblclick=()=>{rot=false;zoom=zoom===1?2:1;applyZoom();};
+addEventListener('resize',()=>{if(!$('vw').hidden&&rot)applyZoom();});
+$('wt').onclick=()=>{$('vw').hidden=false;zoom=1;rot=false;applyZoom();room.emit('ae-want',{v:1}).catch(()=>{});};
+$('vx').onclick=()=>{$('vw').hidden=true;room.emit('ae-want',{v:0}).catch(()=>{});};
 
 /* ---- 書く欄・メニュー2（保存・履歴・タイムマシン） ---- */
 (function(){
 const pad=$('pad'),cx=pad.getContext('2d'),COL=['#ffffff','#ffe66d','#ff9fb0','#7fd8ff','#a8f5c2','#ffb86b','#d6a8ff','#ff6b6b'];
-let strokes=[],cur=null,color=COL[0],mode='pen',hist=[JSON.stringify([])],base=null,playing=0;
+let strokes=[],cur=null,color=COL[0],mode='pen';
 const SK='aelia.join.saves.v1';
 const redraw=()=>{cx.clearRect(0,0,1000,750);cx.lineCap='round';cx.lineJoin='round';
  strokes.concat(cur?[cur]:[]).forEach(s=>{cx.strokeStyle=s.c;cx.lineWidth=5;cx.shadowColor=s.c;cx.shadowBlur=6;cx.beginPath();s.p.forEach((q,i)=>i?cx.lineTo(q[0],q[1]):cx.moveTo(q[0],q[1]));if(s.p.length===1)cx.lineTo(s.p[0][0]+.1,s.p[0][1]);cx.stroke();});cx.shadowBlur=0;};
 const pt=e=>{const r=pad.getBoundingClientRect();return[(e.clientX-r.left)*1000/r.width,(e.clientY-r.top)*750/r.height];};
 const segD=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;let t=l?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l:0;t=Math.max(0,Math.min(1,t));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);};
 const hit=(q,s)=>{for(let i=0;i<s.p.length-1;i++)if(segD(q,s.p[i],s.p[i+1])<18)return true;return s.p.length===1&&Math.hypot(q[0]-s.p[0][0],q[1]-s.p[0][1])<18;};
-const snapNow=()=>{const j=JSON.stringify(strokes);if(j!==hist[hist.length-1]){hist.push(j);if(hist.length>80)hist.splice(1,1);}sync();};
-let down=false;
-pad.addEventListener('pointerdown',e=>{if(base)commit();down=true;try{pad.setPointerCapture(e.pointerId);}catch(_){}const q=pt(e);
+const snapNow=()=>{};
+let down=false;const tch=new Set();let two=false;
+pad.addEventListener('pointerdown',e=>{
+ if(e.pointerType==='touch'){tch.add(e.pointerId);if(down&&!two){two=true;cur=null;down=false;mode=mode==='era'?'pen':'era';setMode();redraw();e.preventDefault();return;}}
+ if(two)return;down=true;try{pad.setPointerCapture(e.pointerId);}catch(_){}const q=pt(e);
  if(mode==='pen')cur={c:color,p:[q]};else eraseAt(q);redraw();e.preventDefault();});
 pad.addEventListener('pointermove',e=>{if(!down)return;const q=pt(e);if(mode==='pen'&&cur)cur.p.push(q);else if(mode==='era')eraseAt(q);redraw();});
 const up=()=>{if(!down)return;down=false;if(cur){strokes.push(cur);cur=null;}redraw();snapNow();};
-pad.addEventListener('pointerup',up);pad.addEventListener('pointercancel',up);
+const lift=e=>{tch.delete(e.pointerId);if(!tch.size)two=false;};
+pad.addEventListener('pointerup',e=>{up();lift(e);});pad.addEventListener('pointercancel',e=>{up();lift(e);});
 function eraseAt(q){strokes=strokes.filter(s=>!hit(q,s));}
 const sw=$('sw');COL.forEach((c,i)=>{const d=document.createElement('i');d.style.background=c;if(!i)d.className='on';d.onclick=()=>{color=c;mode='pen';setMode();[...sw.children].forEach(x=>x.classList.toggle('on',x===d));};sw.appendChild(d);});
 function setMode(){$('mpen').classList.toggle('on',mode==='pen');$('mera').classList.toggle('on',mode==='era');}
 $('mpen').onclick=()=>{mode='pen';setMode();};$('mera').onclick=()=>{mode=mode==='era'?'pen':'era';setMode();};
 $('mclr').onclick=()=>{if(!strokes.length)return;strokes=[];redraw();snapNow();};
 $('wbtn').onclick=()=>{const w=$('wr');w.hidden=!w.hidden;$('wbtn').classList.toggle('on',!w.hidden);if(!w.hidden){redraw();w.scrollIntoView({behavior:'smooth',block:'nearest'});}};
-$('m2btn').onclick=()=>{const m=$('m2');m.hidden=!m.hidden;$('m2btn').classList.toggle('on',!m.hidden);if(!m.hidden){sync();list();}};
-/* time machine */
-const sl=$('tms'),lab=$('tml');
-function label(){lab.textContent=(+sl.value+1)+' / '+hist.length+(base?'（見ているところ）':'（いま）');}
-function sync(){sl.max=Math.max(0,hist.length-1);if(!base)sl.value=sl.max;label();}
-function show(v){if(!base)base=JSON.stringify(strokes);strokes=JSON.parse(hist[v]);redraw();label();}
-function stop(){if(playing){clearInterval(playing);playing=0;$('tmp').textContent='▶ 再生';}}
-function commit(){stop();if(!base)return;const v=+sl.value;hist=hist.slice(0,v+1);base=null;sync();}
-sl.oninput=()=>{stop();$('wr').hidden&&($('wr').hidden=false,$('wbtn').classList.add('on'));show(+sl.value);};
-$('tmp').onclick=()=>{if(playing){stop();return;}if(hist.length<2)return;$('wr').hidden=false;$('wbtn').classList.add('on');let v=0;sl.value=0;show(0);$('tmp').textContent='■ とめる';
- playing=setInterval(()=>{v++;if(v>=hist.length){stop();return;}sl.value=v;show(v);},420);};
-$('tmo').onclick=commit;
-$('tmu').onclick=()=>{stop();if(base){strokes=JSON.parse(base);base=null;redraw();}sync();};
+$('m2btn').onclick=()=>{const m=$('m2');m.hidden=!m.hidden;$('m2btn').classList.toggle('on',!m.hidden);if(!m.hidden){list();}};
 /* save / history */
 const load=()=>{try{const a=JSON.parse(localStorage.getItem(SK)||'[]');return Array.isArray(a)?a:[];}catch(e){return[];}};
 const store=a=>{while(a.length){try{localStorage.setItem(SK,JSON.stringify(a));return true;}catch(e){a.pop();}}return false;};
@@ -207,12 +218,11 @@ function list(){const a=load(),box=$('hl');box.innerHTML='';if(!a.length){box.in
  a.forEach(it=>{const r=document.createElement('div');r.className='li';r.innerHTML='<img alt=""><span></span><button>呼び出す</button><button class="sub">🗑</button>';
   r.querySelector('img').src=it.th;r.querySelector('span').textContent=stamp(it.t);
   const bs=r.querySelectorAll('button');
-  bs[0].onclick=()=>{commit();hist.push(JSON.stringify(strokes));strokes=it.s;redraw();hist.push(JSON.stringify(strokes));sync();$('wr').hidden=false;$('wbtn').classList.add('on');$('wr').scrollIntoView({behavior:'smooth',block:'nearest'});};
+  bs[0].onclick=()=>{strokes=it.s;redraw();$('wr').hidden=false;$('wbtn').classList.add('on');$('wr').scrollIntoView({behavior:'smooth',block:'nearest'});};
   bs[1].onclick=()=>{store(load().filter(x=>x.id!==it.id));list();};
   box.appendChild(r);});}
-$('svb').onclick=()=>{commit();if(!strokes.length){$('svb').textContent='まだ、なにも書かれていないよ';setTimeout(()=>$('svb').textContent='いまの内容を保存',1500);return;}
+$('svb').onclick=()=>{if(!strokes.length){$('svb').textContent='まだ、なにも書かれていないよ';setTimeout(()=>$('svb').textContent='いまの内容を保存',1500);return;}
  redraw();const a=load();a.unshift({id:Date.now().toString(36),t:Date.now(),th:thumb(),s:strokes});if(a.length>30)a.length=30;
  $('svb').textContent=store(a)?'保存したよ！':'保存できませんでした';setTimeout(()=>$('svb').textContent='いまの内容を保存',1500);list();};
-sync();
 })();
 </script></body></html>
