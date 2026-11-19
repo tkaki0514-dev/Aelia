@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b2a22">
-<meta name="version" content="1.0.1">
+<meta name="version" content="1.1.0">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Aelia">
@@ -203,7 +203,7 @@ const easeOut=t=>1-Math.pow(1-t,3);
 const easeOutBack=t=>{const c1=1.70158,c3=c1+1;return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2);};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const COLORS=['#ffffff','#ffe66d','#ff9fb0','#7fd8ff','#a8f5c2','#ffb86b','#d6a8ff','#ff6b6b'];
-const KIND_JA={rect:'四角形',quad:'四角形',circle:'円',ellipse:'だ円',tri:'三角形',sphere:'球体',box:'立体の四角（直方体）',prism:'立体の三角（三角柱）',pyramid:'立体の三角（三角すい）',piece:'切った図形'};
+const KIND_JA={rect:'四角形',quad:'四角形',circle:'円',ellipse:'だ円',tri:'三角形',sphere:'球体',box:'立体の四角（直方体）',prism:'立体の三角（三角柱）',pyramid:'立体の三角（三角すい）',piece:'切った図形',star:'立体の星'};
 
 /* ---------- vec / mat ---------- */
 const add3=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]], sub3=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]], mul3=(a,k)=>[a[0]*k,a[1]*k,a[2]*k];
@@ -554,6 +554,30 @@ function prismFromVerts(V){
   const faces=[F,Bk];for(let i=0;i<3;i++)faces.push([F[i],F[(i+1)%3],Bk[(i+1)%3],Bk[i]]);
   return solidFromWorld(faces,F.concat(Bk));
 }
+function solidStar(n,R,r,H){            // puffy 3D star: outline alternates R / r, pointed on both faces
+  const ring=[];for(let i=0;i<n*2;i++){const a=PI/2+PI*i/n,rr=i%2?r:R;ring.push([Math.cos(a)*rr,Math.sin(a)*rr,0]);}
+  const top=[0,0,H],bot=[0,0,-H],f=[];
+  for(let i=0;i<ring.length;i++){const p=ring[i],q=ring[(i+1)%ring.length];f.push({pts:[p.slice(),q.slice(),top.slice()]});f.push({pts:[q.slice(),p.slice(),bot.slice()]});}
+  return mkSolid(finishFaces(f));
+}
+function detectStar(pts){          // one stroke: a star outline (or a one-stroke pentagram) -> 3D star
+  const bb=bbox(pts),M=Math.max(bb.w,bb.h);if(M<70)return null;
+  if(bb.w/bb.h>1.7||bb.h/bb.w>1.7)return null;
+  if(dist(pts[0],pts[pts.length-1])>0.4*M||pathLen(pts)<2.4*M)return null;
+  const P=resample(pts,150,false),cx=bb.cx,cy=bb.cy;
+  let r=P.map(q=>Math.hypot(q[0]-cx,q[1]-cy));
+  r=r.map((v,i)=>(r[Math.max(0,i-1)]+v+r[Math.min(r.length-1,i+1)])/3);
+  const rmax=Math.max(...r);const W=7,peaks=[],valleys=[];
+  const nn=r.length;
+  for(let i=0;i<nn;i++){let mx=true,mn=true;for(let k=-W;k<=W;k++){const v=r[(i+k+nn)%nn];if(v>r[i])mx=false;if(v<r[i])mn=false;}
+    if(mx&&r[i]>0.74*rmax&&peaks.every(j=>Math.min(Math.abs(i-j),nn-Math.abs(i-j))>W))peaks.push(i);
+    if(mn&&r[i]<0.66*rmax&&valleys.every(j=>Math.min(Math.abs(i-j),nn-Math.abs(i-j))>W))valleys.push(i);}
+  if(peaks.length<5||peaks.length>6||valleys.length<4)return null;
+  const ang=peaks.map(i=>Math.atan2(P[i][1]-cy,P[i][0]-cx)).sort((a,b)=>a-b);let ok=0;
+  for(let i=0;i<ang.length;i++){let d=(ang[(i+1)%ang.length]-ang[i]+TAU)%TAU;if(d>TAU*0.12&&d<TAU*0.32)ok++;}
+  if(ok<4)return null;
+  return{cx,cy,size:M};
+}
 function solidSphere(r){
   const nLon=32,nLat=16,V=(i,j)=>{const ph=-PI/2+PI*i/nLat,la=TAU*j/nLon;return[r*Math.cos(ph)*Math.cos(la),r*Math.sin(ph),r*Math.cos(ph)*Math.sin(la)];};
   const f=[];
@@ -703,6 +727,8 @@ class Board{
   /* --- recognition → objects --- */
   finalizeGroup(g){
     const strokes=g.strokes,now=performance.now();
+    if(!this.textFix&&strokes.length===1){const st=detectStar(strokes[0].pts);
+      if(st){this.addShape({type:'star',gb:{cx:st.cx,cy:st.cy,w:st.size*1.05,h:st.size*1.05}});this.effects.push({type:'ghost',pts:strokes[0].pts,color:strokes[0].color,t0:now,dur:380});this.dirty=true;return;}}
     // a solid is often drawn with pauses: join the strokes drawn a moment ago (still untouched) and look again
     if(!this.textFix&&this.tryMergeSolid(strokes,now))return;
     if(this.textFix&&strokes.length>=1&&strokes.length<=14){const r0=analyzeGroup(strokes,{});const sh=r0.shapes;
@@ -848,6 +874,7 @@ class Board{
       if(py)o=this.baseObj('pyramid',py.S,py.cx,-py.cy,I3(),false);else{const S=solidPyramid(d.base,1,1.35);const R=mm(Rx(0.42),Ry(-0.5));
       const pos=this.fitSolid(S,R,d.gb);o=this.baseObj('pyramid',S,pos[0],pos[1],R,false);}
     }
+    if(!o&&d.type==='star'){const S=solidStar(5,1,0.46,0.42),R=mm(Rx(0.42),Ry(-0.5)),pos=this.fitSolid(S,R,d.gb);o=this.baseObj('star',S,pos[0],pos[1],R,false);}
     if(o){this.objects.push(o);this.dirty=true;}
     return o;
   }
@@ -859,6 +886,7 @@ class Board{
     if(kind==='sphere')return this.addShape({type:'sphere',cx:x,cy:y,r:s/2});
     if(kind==='box')return this.addShape({type:'box',mode:'iso',gb:{cx:x,cy:y,w:s*1.25,h:s*1.25}});
     if(kind==='pyramid')return this.addShape({type:'pyramid',base:3,gb:{cx:x,cy:y,w:s*1.25,h:s*1.25}});
+    if(kind==='star')return this.addShape({type:'star',gb:{cx:x,cy:y,w:s*1.25,h:s*1.25}});
   }
 
   /* --- object helpers --- */
@@ -978,7 +1006,8 @@ class Board{
     const lines=o.solid.lines;
     if(lines.length){c.save();c.lineWidth=1.1;c.strokeStyle='rgba('+r+','+g+','+b+',.16)';for(const L of lines){c.beginPath();let on=false;for(const p of L){const q=this.project(o,p,s);if(q[2]<0){on?c.lineTo(q[0],q[1]):c.moveTo(q[0],q[1]);on=true;}else on=false;}c.stroke();}c.restore();}
     c.save();
-    for(const f of o.solid.faces){
+    const FACES=o.kind==='star'?o.solid.faces.slice().sort((a,b)=>mv(R,a.c)[2]-mv(R,b.c)[2]):o.solid.faces;
+    for(const f of FACES){
       const nrm=f.smooth?norm3(f.c):f.n,rn=mv(R,nrm);
       if(f.smooth?rn[2]<-0.12:rn[2]<=0.015)continue;
       const P=f.pts.map(p=>this.project(o,p,s));
@@ -1057,7 +1086,7 @@ function buildUI(root,board){
        '<button class="tbtn" type="button" data-act="ai">'+svg('ai')+'<span>AI</span></button>'+
      '</div><div class="hr"></div>'+
      '<div class="trow"><div style="flex:1"><b>自動文字補正</b><small>文字を書くと、きれいに直します。ふだんはオフ。</small></div><button class="tog" type="button" role="switch" aria-checked="false" aria-label="自動文字補正"></button></div>'+
-     '<div class="hr"></div><button class="replay" type="button">▶ 動作方法をもう一度見る</button>'+'<div style="text-align:center;font:600 11px var(--font);color:var(--ink2);margin-top:8px">Ver.1.0.1</div>'+'</div>'+
+     '<div class="hr"></div><button class="replay" type="button">▶ 動作方法ムービー</button>'+'<div style="text-align:center;font:600 11px var(--font);color:var(--ink2);margin-top:8px">Ver.1.1.0</div>'+'</div>'+
    '<div class="tpanel" hidden><div class="tdisp">5:00</div><div class="tpre"><button type="button" data-m="1">1分</button><button type="button" data-m="3">3分</button><button type="button" data-m="5">5分</button><button type="button" data-m="10">10分</button><button type="button" data-m="25">25分</button></div><div class="tadj"><button type="button" data-d="-60">− 1分</button><button type="button" data-d="60">＋ 1分</button></div><div class="tgo"><button type="button" class="go">スタート</button><button type="button" class="rs">リセット</button></div></div>'+
    '<div class="hint"></div>'+
    '<div class="chat" hidden><header><i></i>AIせんせい<small>なんでも聞いてね</small><button class="cl" type="button" aria-label="とじる">✕</button></header><div class="msgs"></div><div class="chips"></div><div class="cin"><textarea rows="1" placeholder="たとえば「立方体ってなに？」"></textarea><button type="button" aria-label="送る">➤</button></div></div>'+
@@ -1225,7 +1254,6 @@ const AeliaAI=(function(){
 })();
 let claudeSampleP=null;
 function getSample(){
-  if(!(window.__aeliaIn&&window.__aeliaIn()))return null;
   if(AeliaAI.ready())return AeliaAI.sample;
   return claudeSampleP||(claudeSampleP=(window.claude&&window.claude.use?window.claude.use('sample').catch(()=>null):Promise.resolve(null)));
 }
@@ -1237,15 +1265,28 @@ const GUIDE='あなたは、お絵かきアプリ「Aelia」の中にいる、�
 '【Aeliaの使い方】四角っぽく描くときれいな四角に、立体っぽく描くと立体の四角に、丸はきれいな丸に、球体っぽく描くと球体に、三角や立体の三角も自動で整います。メニューで、色・削除・全削除・移動・回転（縦も横も）・切る・自動文字補正・タイマー・共有・画面・データ・画像（PNGで保存や共有）・カメラ・AIが使えます。「共有」でパスワードとQRをつくると、読みとった人と、画像を送ったり、画面を見せたりできます。「カメラ」は、書類を撮ると文字起こしします。\n'+
 '【さいご】むずかしい話のあとは、「ここまでで、わからない所はあるかな？」のように、やさしく声をかけます。';
 function localAnswer(q,board){
-  const s=q.replace(/\s/g,'');
-  if(/使い方|つかいかた|どうやって|操作|そうさ/.test(s))return 'Aeliaの使い方だよ。\n・四角や丸っぽく描くと、きれいな形に変身するよ。\n・立体っぽく描くと、立体になるよ。\n・左の「回転」でくるくる回せて、「切る」でなぞったところで切れるよ。\n・「移動」で、囲んださわると光って、まとめて動かせるよ。';
-  if(/立方体|さいころ|サイコロ|直方体|立体の四角/.test(s))return '立方体は、6つの同じ大きさの正方形でできた箱の形だよ。サイコロがそうだね。\n体積は「1辺×1辺×1辺」。1辺が3なら 3×3×3＝27 だよ。\n直方体なら「たて×よこ×高さ」で体積が出せるよ。';
-  if(/球|ボール/.test(s))return '球体は、どこから見ても丸いボールの形だよ。\n体積は「4/3×3.14×半径×半径×半径」。半径が3なら 約113 だよ。\n表面積は「4×3.14×半径×半径」で出せるよ。';
-  if(/円|まる|丸/.test(s))return '円は、真ん中から同じ長さの点を集めた丸い形だよ。\n面積は「半径×半径×3.14」、まわりの長さは「直径×3.14」。半径が5なら 面積は 78.5 だよ。';
+  const s=q.replace(/\s/g,'').replace(/[０-９．＋－＊／]/g,c=>({'．':'.','＋':'+','－':'-','＊':'*','／':'/'}[c]||String.fromCharCode(c.charCodeAt(0)-0xFEE0)));
+  const nums=(s.match(/\d+(?:\.\d+)?/g)||[]).map(Number),r4=v=>Math.round(v*100)/100,PIv=3.14;
+  // 1) a sum: calculate it
+  const m=/[\d(][\d+\-*/×÷^().xX√π]*[\d)]/.exec(s);
+  if(m&&/[+\-*/×÷^√]/.test(m[0])&&!/半径|直径|底辺|高さ|たて|よこ|辺/.test(s)){try{return m[0].replace(/\*/g,'×').replace(/\//g,'÷')+' ＝ '+safeCalc(m[0])+' だよ。';}catch(e){}}
+  // 2) shapes with numbers
+  if(/球|ボール/.test(s)&&nums.length){const r=nums[0];return '半径'+r+'の球だね。\n体積＝4/3×3.14×'+r+'×'+r+'×'+r+'＝約'+r4(4/3*PIv*r*r*r)+'\n表面積＝4×3.14×'+r+'×'+r+'＝約'+r4(4*PIv*r*r);}
+  if(/円|まる|丸/.test(s)&&nums.length){let r=nums[0];if(/直径/.test(s))r=r/2;return '半径'+r+'の円だね。\n面積＝'+r+'×'+r+'×3.14＝'+r4(r*r*PIv)+'\nまわりの長さ＝'+r*2+'×3.14＝'+r4(2*r*PIv);}
+  if(/立方体|さいころ|サイコロ/.test(s)&&nums.length){const a=nums[0];return '1辺'+a+'の立方体だね。\n体積＝'+a+'×'+a+'×'+a+'＝'+r4(a*a*a)+'\n表面積＝'+a+'×'+a+'×6＝'+r4(a*a*6);}
+  if(/直方体/.test(s)&&nums.length>=3){const[a,b,c]=nums;return 'たて'+a+'・よこ'+b+'・高さ'+c+'の直方体だね。\n体積＝'+a+'×'+b+'×'+c+'＝'+r4(a*b*c);}
+  if(/三角/.test(s)&&nums.length>=2&&!/すい|柱|ピラミッド/.test(s)){const[a,b]=nums;return '底辺'+a+'・高さ'+b+'の三角形だね。\n面積＝'+a+'×'+b+'÷2＝'+r4(a*b/2);}
+  if(/(四角|長方形|正方形)/.test(s)&&nums.length>=2){const[a,b]=nums;return 'たて'+a+'・よこ'+b+'の長方形だね。\n面積＝'+a+'×'+b+'＝'+r4(a*b)+'\nまわりの長さ＝('+a+'＋'+b+')×2＝'+r4((a+b)*2);}
+  // 3) the app
+  if(/使い方|つかいかた|どうやって|操作|そうさ/.test(s))return 'Aeliaの使い方だよ。\n・四角や丸っぽく描くと、きれいな形に変身するよ。\n・立体っぽく描くと、立体になるよ。星をかくと、立体の星になるよ。\n・左の「回転」でくるくる回せて、「切る」でなぞったところで切れるよ。\n・「移動」で、囲んださわると光って、まとめて動かせるよ。\n・「メニュー2」で、保存・保存履歴・タイムマシン（巻き戻し）が使えるよ。';
+  if(/星|スター/.test(s))return '立体の星は、メニューの「3D星」を押すか、星のかたちを1回でかくと出てくるよ。「回転」でくるくる回せるし、「切る」で切ることもできるよ。';
+  if(/立方体|さいころ|サイコロ|直方体|立体の四角/.test(s))return '立方体は、6つの同じ大きさの正方形でできた箱の形だよ。サイコロがそうだね。\n体積は「1辺×1辺×1辺」。1辺が3なら 3×3×3＝27 だよ。\n直方体なら「たて×よこ×高さ」で体積が出せるよ。\n数字を入れて「1辺4の立方体」と聞いてくれたら、計算するよ。';
+  if(/球|ボール/.test(s))return '球体は、どこから見ても丸いボールの形だよ。\n体積は「4/3×3.14×半径×半径×半径」。表面積は「4×3.14×半径×半径」。\n「半径3の球」のように聞いてくれたら、計算するよ。';
+  if(/円|まる|丸/.test(s))return '円は、真ん中から同じ長さの点を集めた丸い形だよ。\n面積は「半径×半径×3.14」、まわりの長さは「直径×3.14」。「半径5の円」のように聞いてね。';
   if(/三角|ピラミッド|角すい|三角柱/.test(s))return '三角形の面積は「底辺×高さ÷2」だよ。底辺が6、高さが4なら 6×4÷2＝12。\n立体の三角には、ピラミッドみたいな三角すい（体積は 底の面積×高さ÷3）と、三角柱（体積は 底の面積×高さ）があるよ。';
-  if(/四角|正方形|長方形/.test(s))return '長方形の面積は「たて×よこ」、まわりの長さは「(たて＋よこ)×2」だよ。正方形は、たてとよこが同じ長さの四角形だね。';
-  if(/今|いま|図形|描いた|かいた|説明/.test(s))return 'いまボードにあるのは、こんな図形だよ。\n'+board.describe();
-  return 'いまはAIにつながっていないから、かんたん解説モードだよ。\nメニューの「AI設定」でAPIキーを入れると、なんでも答えられるよ。\n「使い方」「立方体」「球」「円」「三角」のことなら答えられるよ。';
+  if(/四角|正方形|長方形/.test(s))return '長方形の面積は「たて×よこ」、まわりの長さは「(たて＋よこ)×2」だよ。正方形は、たてとよこが同じ長さの四角形だね。「たて4よこ6の四角」のように聞いてね。';
+  if(/今|いま|図形|描いた|かいた|説明|解説/.test(s))return 'いまボードにあるのは、こんな図形だよ。\n'+board.describe();
+  return 'AIなしでも、ここで答えられるよ。\n・計算：「3×3×3は？」のように式を送ってね。\n・図形：「半径3の球」「1辺4の立方体」「底辺6高さ4の三角」\n・「使い方」「星」「いまの図形」\nもっと自由に聞きたいときは、メニューの「AI設定」でAPIキーを入れてね（なくても全部の機能が使えるよ）。';
 }
 function safeCalc(expr){
   let e=String(expr||'').replace(/[×x✕]/g,'*').replace(/÷/g,'/').replace(/＝|=/g,'').replace(/,/g,'').replace(/π|pi/gi,String(Math.PI)).replace(/\^/g,'**').replace(/√\s*\(?([\d.]+)\)?/g,'Math.sqrt($1)');
@@ -1293,7 +1334,6 @@ function bindChat(ui,board){
     opt=opt||{};
     if(busy)return;busy=true;ui.send.disabled=true;ui.ta.value='';ui.chips.hidden=true;follow.hidden=true;
     ui.addMsg('u',opt.show||text);const bub=ui.addMsg('a','考え中…');
-    if(!(window.__aeliaIn&&window.__aeliaIn())){bub.textContent='AIせんせいは、「共有」でQRを読みとって、コードを入れてからつかえるよ。';busy=false;ui.send.disabled=false;return;}
     const sample=await getSample();
     try{
       if(!sample)throw{code:'none'};
@@ -1926,7 +1966,7 @@ const AeliaShare=(function(){
     /* ----- menu buttons ----- */
     const gate=f=>()=>{if(!R.role){toast('先に「共有」で、QRを読みとって、コードを入れてね');return;}f();};
     window.__aeliaIn=()=>!!R.role;
-    const mb=menuButtons(ui,{share:()=>openShare(),screen:gate(()=>openScreen()),data:gate(()=>openData()),image:gate(()=>openImage()),camera:gate(()=>openCamera()),ai:gate(()=>AeliaAI.openSettings(ui))});
+    const mb=menuButtons(ui,{share:()=>openShare(),screen:gate(()=>openScreen()),data:gate(()=>openData()),image:()=>openImage(),camera:()=>openCamera(),ai:()=>AeliaAI.openSettings(ui)});
 
     /* ----- side cards (left) ----- */
     const side=document.createElement('div');side.className='sh-side';root.appendChild(side);
@@ -2185,15 +2225,18 @@ const AeliaShare=(function(){
         const caps=await sample.limits();if(!caps||!caps.images)throw {code:'none'};
         const res=await sample('この写真に写っている書類・ノート・看板などの文字を、読み取れるかぎり正確に文字起こししてください。見出しや段落、箇条書き、表の並びは、改行でなるべく元のとおりに保ちます。手書きも読み取ります。説明や前置きは書かず、文字起こしの本文だけを出力してください。文字がまったく読み取れない場合は「文字が見つかりませんでした」とだけ書いてください。',{images:[blob],modelTier:'default',cache:false});
         text=(res.text||'').trim();
-      }catch(e){wr.classList.remove('sh-scan');text='';tx.textContent=(e&&e.code==='none')||!e?'文字起こしには、AIが必要だよ。メニューの「AI設定」で、画像が読めるAIをつないでね。':'読みとれませんでした。明るい所で、もう一度とってみてね。';return;}
-      wr.classList.remove('sh-scan');tx.textContent=text||'文字が見つかりませんでした';R.lastText=text;
-      el.querySelector('header span').textContent='カメラの文字起こし';
-      tx.addEventListener('click',()=>el.classList.toggle('open'));
+      }catch(e){wr.classList.remove('sh-scan');text='';
+        if(window.TextDetector){try{const bm=await createImageBitmap(blob);const det=new TextDetector();const rs=await det.detect(bm);text=rs.map(r=>r.rawValue).join('\n').trim();}catch(_){text='';}}
+        if(!text){tx.contentEditable='true';tx.style.cssText+=';min-height:3.2em;border:1px dashed var(--line);border-radius:8px;padding:4px;outline:none';tx.textContent='';tx.dataset.empty='1';el.querySelector('header span').textContent='カメラ（AIなし）';
+          ui.toast('AIなしなので、文字は自分で書きこめるよ');}}
+      wr.classList.remove('sh-scan');if(text)tx.textContent=text;else if(!tx.dataset.empty)tx.textContent='文字が見つかりませんでした';R.lastText=text;
+      if(text)el.querySelector('header span').textContent='カメラの文字起こし';
+      if(!tx.isContentEditable)tx.addEventListener('click',()=>el.classList.toggle('open'));
       const bt=document.createElement('div');bt.className='bt';
       const cp=document.createElement('button');cp.type='button';cp.textContent='コピー';
-      cp.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(text);toast('コピーしました');}catch(e){const r=document.createRange();r.selectNodeContents(tx);const s=getSelection();s.removeAllRanges();s.addRange(r);toast('選んだよ。コピーしてね');}});
+      cp.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(tx.textContent);toast('コピーしました');}catch(e){const r=document.createRange();r.selectNodeContents(tx);const s=getSelection();s.removeAllRanges();s.addRange(r);toast('選んだよ。コピーしてね');}});
       const ex=document.createElement('button');ex.type='button';ex.className='go';ex.textContent='AIが解説';
-      ex.addEventListener('click',()=>{ui.toggleChat(true);askAI('この文章を、わかりやすく解説して。むずかしい言葉は、かみくだいて。\n\n'+text,{show:'📷 カメラで読みとった文章を解説して'});});
+      ex.addEventListener('click',()=>{ui.toggleChat(true);askAI('この文章を、わかりやすく解説して。むずかしい言葉は、かみくだいて。\n\n'+tx.textContent,{show:'📷 カメラで読みとった文章を解説して'});});
       bt.append(cp,ex);el.appendChild(bt);
     });
 
@@ -2245,11 +2288,108 @@ const AeliaShare=(function(){
     /* ----- invited by QR? ----- */
     const fromUrl=()=>{const m=/(?:[#?&]j=|#join-)([a-z0-9]{8})/i.exec(location.hash+location.search);return m?m[1].toLowerCase():'';};
     const sidIn=fromUrl();
-    R.joinForm=joinForm;R.cameraCard=gate(()=>openCamera());
+    R.joinForm=joinForm;R.cameraCard=()=>openCamera();
     if(sidIn)setTimeout(()=>joinForm(sidIn,true),200);
     return R;
   }
   return{init,css,menuButtons,hostFormHTML,qrHTML,APP_URL};
+})();
+
+/* ---------- menu 2: time machine / save / history / 3D star button ---------- */
+const AeliaMenu2=(function(){
+  const KEY='aelia.saves.v1',MAXH=60;
+  const CSS=`
+.m2btn{left:calc(max(16px,env(safe-area-inset-left,0px)) + 136px)!important;width:auto;min-width:58px;padding:0 8px}
+.modechip{left:calc(max(16px,env(safe-area-inset-left,0px)) + 222px)!important}
+@media (max-height:560px){.m2btn{left:calc(max(16px,env(safe-area-inset-left,0px)) + 116px)!important}.modechip{left:calc(max(16px,env(safe-area-inset-left,0px)) + 190px)!important}}
+.panel.p2{position:absolute;left:max(16px,env(safe-area-inset-left,0px));top:84px;width:min(320px,calc(100% - 32px));max-height:calc(100% - 100px);overflow:auto}
+.p2 h4 small{margin-left:6px;padding:2px 7px;border-radius:999px;background:linear-gradient(145deg,var(--acc1),var(--acc2));color:var(--accInk);font-size:10px;letter-spacing:0}
+.p2 p{margin:0 0 8px;font-size:12px;line-height:1.55;color:var(--ink2)}
+.p2 input[type=range]{width:100%;accent-color:#9db6ff}
+.p2 .m2lab{text-align:center;font:700 12px var(--font);color:var(--ink2);margin:2px 0 8px}
+.p2 .m2b{display:flex;gap:6px;flex-wrap:wrap}
+.p2 .m2b button,.p2 .m2sv{flex:1;min-width:0;border-radius:12px;border:1px solid var(--line);background:rgba(255,255,255,.1);color:var(--ink);padding:10px 6px;font:800 12px var(--font);cursor:pointer}
+.p2 .m2b button.go,.p2 .m2sv{background:linear-gradient(145deg,var(--acc1),var(--acc2));color:var(--accInk);border-color:transparent}
+.p2 .m2sv{width:100%}
+.p2 .m2li{display:flex;align-items:center;gap:8px;padding:6px;border-radius:12px;background:rgba(255,255,255,.06);margin-bottom:6px}
+.p2 .m2li img{width:64px;height:40px;object-fit:cover;border-radius:8px;background:#000;flex:none}
+.p2 .m2li span{flex:1;font:600 11px/1.3 var(--font);color:var(--ink2);min-width:0}
+.p2 .m2li button{flex:none;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.1);color:var(--ink);padding:7px 8px;font:800 11px var(--font);cursor:pointer}
+.p2 .m2li button.go{background:linear-gradient(145deg,var(--acc1),var(--acc2));color:var(--accInk);border-color:transparent}
+.p2 .m2em{font-size:12px;color:var(--ink2);text-align:center;padding:8px 0}
+`;
+  const rep=(k,v)=>(k==='anim'||k==='morph')?undefined:(typeof v==='number'?Math.round(v*1000)/1000:v);
+  const snap=b=>JSON.stringify({o:b.objects,n:b.nextId},rep);
+  function restore(b,str){
+    const d=JSON.parse(str);d.o.forEach(o=>{o.born=-1e9;});
+    b.flush(true);b.objects=d.o;b.nextId=d.n;b.sel=new Set();b.effects=[];b.recent=[];b.pendingText=[];b.drag=null;b.lasso=null;b.cutPath=null;b.dirty=true;
+  }
+  const sig=b=>b.objects.map(o=>o.id+':'+(o.kind==='stroke'?o.pts.length+','+Math.round(o.pts[0][0])+','+Math.round(o.pts[0][1]):Math.round(o.x)+','+Math.round(o.y)+(o.R?','+Math.round(o.R[0][0]*200)+','+Math.round(o.R[1][1]*200)+','+Math.round(o.R[2][0]*200)+','+(o.solid?o.solid.faces.length:0):''))+(o.color||'')).join('|');
+  function thumb(b){const cv=b.cv,w=220,h=Math.max(1,Math.round(w*cv.height/cv.width)),o=document.createElement('canvas');o.width=w;o.height=h;const c=o.getContext('2d');c.fillStyle='#0b2a22';c.fillRect(0,0,w,h);c.drawImage(cv,0,0,w,h);return o.toDataURL('image/jpeg',.6);}
+  const load=()=>{try{const a=JSON.parse(localStorage.getItem(KEY)||'[]');return Array.isArray(a)?a:[];}catch(e){return [];}};
+  const store=a=>{while(a.length){try{localStorage.setItem(KEY,JSON.stringify(a));return true;}catch(e){a.pop();}}try{localStorage.removeItem(KEY);}catch(e){}return false;};
+  const stamp=t=>{const d=new Date(t),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'/'+p(d.getMonth()+1)+'/'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes());};
+  function init(o){
+    const {ui,board}=o;
+    if(!document.getElementById('ae-m2-css')){const st=document.createElement('style');st.id='ae-m2-css';st.textContent=CSS;document.head.appendChild(st);}
+    const root=ui.ui;
+    /* --- menu 2 button + panel --- */
+    const btn=document.createElement('button');btn.type='button';btn.className='mbtn m2btn';btn.setAttribute('aria-label','メニュー2');
+    btn.innerHTML=ui.menu.innerHTML.replace('メニュー','メニュー2');
+    root.insertBefore(btn,ui.tmbtn.nextSibling);
+    const p2=document.createElement('div');p2.className='panel p2';p2.hidden=true;
+    p2.innerHTML='<h4>⏪ タイムマシン<small>神機能</small></h4><p>書いた順に、ボードを巻き戻したり、早送りしたりできるよ。むかしの状態にもどして、そこからやり直しもできるよ。</p>'+
+      '<input type="range" min="0" max="0" value="0" data-s aria-label="時間"><div class="m2lab" data-l></div>'+
+      '<div class="m2b"><button type="button" data-play>▶ 再生</button><button type="button" class="go" data-ok>ここで決定</button><button type="button" data-undo>もとにもどす</button></div>'+
+      '<div class="hr"></div><h4>💾 保存</h4><button type="button" class="m2sv" data-save>いまの内容を保存</button>'+
+      '<div class="hr"></div><h4>🕘 保存履歴</h4><div data-list></div>';
+    root.appendChild(p2);
+    const q=s=>p2.querySelector(s),sl=q('[data-s]'),lab=q('[data-l]');
+    /* --- time machine --- */
+    let hist=[{s:snap(board)}],last=sig(board),base=null,playing=0;
+    const label=()=>{lab.textContent=(+sl.value+1)+' / '+hist.length+(base?'（見ているところ）':'（いま）');};
+    const sync=()=>{sl.max=Math.max(0,hist.length-1);sl.value=sl.max;label();};
+    setInterval(()=>{if(base||board.cur||board.group||!board.objects)return;let g;try{g=sig(board);}catch(e){return;}
+      if(g===last)return;last=g;hist.push({s:snap(board)});if(hist.length>MAXH)hist.splice(1,1);if(!p2.hidden)sync();},700);
+    const show=v=>{if(!base)base=snap(board);restore(board,hist[v].s);label();};
+    sl.addEventListener('input',()=>{stop();show(+sl.value);});
+    const stop=()=>{if(playing){clearInterval(playing);playing=0;q('[data-play]').textContent='▶ 再生';}};
+    q('[data-play]').addEventListener('click',()=>{if(playing){stop();return;}if(hist.length<2){ui.toast('まだ、巻き戻せる記録がないよ');return;}
+      let v=0;sl.value=0;show(0);q('[data-play]').textContent='■ とめる';
+      playing=setInterval(()=>{v++;if(v>=hist.length){stop();return;}sl.value=v;show(v);},420);});
+    const commit=()=>{stop();if(!base)return;const v=+sl.value;hist=hist.slice(0,v+1);last=sig(board);base=null;sync();};
+    q('[data-ok]').addEventListener('click',()=>{commit();ui.toast('ここからやり直せるよ');hide();});
+    q('[data-undo]').addEventListener('click',()=>{stop();if(base){restore(board,base);base=null;}last=sig(board);sync();ui.toast('もとにもどしたよ');});
+    /* --- save / history --- */
+    const renderList=()=>{const a=load(),box=q('[data-list]');box.innerHTML='';
+      if(!a.length){box.innerHTML='<div class="m2em">まだ、保存したものはないよ</div>';return;}
+      a.forEach(it=>{const r=document.createElement('div');r.className='m2li';
+        r.innerHTML='<img alt=""><span></span><button type="button" class="go">呼び出す</button><button type="button" aria-label="消す">🗑</button>';
+        r.querySelector('img').src=it.thumb;r.querySelector('span').textContent=stamp(it.t);
+        r.querySelector('.go').addEventListener('click',()=>{commit();hist.push({s:snap(board)});try{restore(board,it.data);}catch(e){ui.toast('呼び出せませんでした');return;}last=sig(board);hist.push({s:snap(board)});sync();ui.toast('呼び出したよ（タイムマシンでもどれるよ）');hide();});
+        r.querySelector('button:not(.go)').addEventListener('click',()=>{const b=load().filter(x=>x.id!==it.id);store(b);renderList();});
+        box.appendChild(r);});};
+    q('[data-save]').addEventListener('click',()=>{commit();
+      if(!board.objects.length){ui.toast('まだ、なにも書かれていないよ');return;}
+      const a=load();a.unshift({id:Date.now().toString(36),t:Date.now(),thumb:thumb(board),data:snap(board)});
+      if(a.length>30)a.length=30;
+      if(store(a)){ui.toast('保存したよ');}else ui.toast('保存できませんでした（容量がいっぱいかも）');renderList();});
+    /* --- open / close (menu 1, timer and menu 2 share the corner) --- */
+    function hide(){commit();p2.hidden=true;btn.classList.remove('on');}
+    function toggle(force){const open=force!==undefined?force:p2.hidden;if(open){ui.togglePanel(false);ui.toggleTimerPanel(false);sync();renderList();p2.hidden=false;btn.classList.add('on');}else hide();}
+    btn.addEventListener('click',()=>toggle());
+    const c0=ui.closePanel;ui.closePanel=()=>{c0();if(!p2.hidden)hide();};
+    const t0=ui.togglePanel;ui.togglePanel=f=>{const open=f!==undefined?f:ui.panel.hidden;if(open&&!p2.hidden)hide();t0(f);};
+    const t1=ui.toggleTimerPanel;ui.toggleTimerPanel=f=>{const open=f!==undefined?f:ui.tpanel.hidden;if(open&&!p2.hidden)hide();t1(f);};
+    /* --- 3D star button in the tools --- */
+    const grid=ui.panel.querySelector('.tools');
+    if(grid&&!grid.querySelector('[data-act=star]')){const b=document.createElement('button');b.type='button';b.className='tbtn';b.dataset.act='star';
+      b.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.6 6.1.7-4.5 4.2 1.2 6-5.4-3-5.4 3 1.2-6L3.3 9.5l6.1-.7z"/></svg><span>3D星</span>';
+      b.addEventListener('click',()=>{ui.closePanel();const s=Math.min(board.W,board.H)*0.34,j=()=>(Math.random()-.5)*0.2;board.spawn('star',board.W*(.5+j()),board.H*(.5+j()),s);});
+      grid.appendChild(b);}
+    return{toggle};
+  }
+  return{init,snap,restore};
 })();
 
 /* ---------- boot ---------- */
@@ -2260,14 +2400,14 @@ function boot(){
   const ui=buildUI(stage,board);
   const chatApi=bindChat(ui,board);
   try{AeliaShare.init({ui,board,stage,askAI:chatApi.ask,getSample});}catch(err){console.error('share init',err);}
+  try{AeliaMenu2.init({ui,board});}catch(err){console.error('menu2 init',err);}
   const ro=new ResizeObserver(()=>{board.resize(stage.clientWidth,stage.clientHeight,window.devicePixelRatio||1);});
   ro.observe(stage);
   window.addEventListener('keydown',e=>{if(e.key==='Escape'){ui.closePanel();ui.dlg.hidden=true;if(board.mode!=='pen')board.setMode(board.mode);}});
   window.__aelia={strokesConnected,detectSolid,textLike,bbox,LETTERS:(typeof LETTERS!=='undefined'?LETTERS:null),board,ui,Board,SLOTS,Demo,buildUI,analyzeGroup,fitClosed,dCircle,dens,dEllArc,rectDemo,RNG:rng};
-  const force=location.hash==='#intro'||/[?&]intro=1/.test(location.search);
+  const force=location.hash==='#intro'||/[?&]intro=1/.test(location.search);void hasSeen;
   ui.replay.addEventListener('click',()=>{ui.closePanel();board.flush();runIntro({replay:true});});
-  const invited=/(?:[#?&]j=|#join-)[a-z0-9]{8}/i.test(location.hash+location.search);
-  if(force||(!hasSeen()&&!invited))runIntro({});
+  if(force)runIntro({});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
 })();
